@@ -467,7 +467,8 @@ This is a fully client-side application. Your content never leaves your browser 
 
   function loadTabsFromStorage() {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      const storedTabs = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return Array.isArray(storedTabs) ? storedTabs : [];
     } catch (e) {
       return [];
     }
