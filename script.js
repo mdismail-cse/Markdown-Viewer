@@ -4093,7 +4093,7 @@ This is a fully client-side application. Your content never leaves your browser 
     return new TextDecoder().decode(pako.inflate(bytes));
   }
 
-  function copyShareUrl(btn) {
+  async function copyShareUrl(btn) {
     const markdownText = markdownEditor.value;
     let encoded;
     try {
@@ -4104,24 +4104,38 @@ This is a fully client-side application. Your content never leaves your browser 
       return;
     }
 
-    const shareUrl = window.location.origin + window.location.pathname + '#share=' + encoded;
-    const tooLarge = shareUrl.length > MAX_SHARE_URL_LENGTH;
+    const baseUrl = window.location.origin + window.location.pathname;
+    const longUrl = baseUrl + '?share=' + encoded;
+    const tooLarge = longUrl.length > MAX_SHARE_URL_LENGTH;
 
     const originalHTML = btn.innerHTML;
-    const copiedHTML = '<i class="bi bi-check-lg"></i> Copied!';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="btn-text">Shortening...</span>';
+
+    let shareUrl = longUrl;
+    if (!tooLarge) {
+      try {
+        const apiResp = await fetch(
+          'https://is.gd/create.php?format=json&url=' + encodeURIComponent(longUrl)
+        );
+        if (apiResp.ok) {
+          const data = await apiResp.json();
+          if (data.shorturl) shareUrl = data.shorturl;
+        }
+      } catch (e) {
+        console.warn("URL shortening failed, using long URL:", e);
+      }
+    }
 
     function onCopied() {
       if (!tooLarge) {
-        window.location.hash = 'share=' + encoded;
+        history.replaceState(null, '', '?share=' + encoded);
       }
-      btn.innerHTML = copiedHTML;
+      btn.innerHTML = '<i class="bi bi-check-lg"></i> <span class="btn-text">Copied!</span>';
       setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
     }
 
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(shareUrl).then(onCopied).catch(() => {
-        // clipboard.writeText failed; nothing further to do in secure context
-      });
+      navigator.clipboard.writeText(shareUrl).then(onCopied).catch(() => {});
     } else {
       try {
         const tempInput = document.createElement("textarea");
@@ -4142,10 +4156,18 @@ This is a fully client-side application. Your content never leaves your browser 
 
   function loadFromShareHash() {
     if (typeof pako === 'undefined') return;
+
+    // Check ?share= query param (new format from shortened URLs)
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryEncoded = searchParams.get('share');
+
+    // Fallback: legacy #share= hash format
     const hash = window.location.hash;
-    if (!hash.startsWith('#share=')) return;
-    const encoded = hash.slice('#share='.length);
+    const hashEncoded = hash.startsWith('#share=') ? hash.slice('#share='.length) : null;
+
+    const encoded = queryEncoded || hashEncoded;
     if (!encoded) return;
+
     try {
       const decoded = decodeMarkdownFromShare(encoded);
       markdownEditor.value = decoded;
