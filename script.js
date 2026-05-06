@@ -4071,10 +4071,39 @@ This is a fully client-side application. Your content never leaves your browser 
   }
 
   // ============================================
-  // Share via URL (pako compression + base64url)
+  // Share via GitHub Gist (short URL) + URL fallback
   // ============================================
 
   const MAX_SHARE_URL_LENGTH = 32000;
+
+  function getGHToken() { return localStorage.getItem('mdv_gh_token') || ''; }
+  function saveGHToken(t) { t ? localStorage.setItem('mdv_gh_token', t.trim()) : localStorage.removeItem('mdv_gh_token'); }
+
+  async function createGist(content) {
+    const token = getGHToken();
+    if (!token) throw new Error('no_token');
+    const r = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public: true, files: { 'shared.md': { content } } })
+    });
+    if (r.status === 401) throw new Error('bad_token');
+    if (!r.ok) throw new Error('gist_fail_' + r.status);
+    return (await r.json()).id;
+  }
+
+  async function loadGist(id) {
+    const r = await fetch('https://api.github.com/gists/' + id);
+    if (!r.ok) throw new Error('load_fail');
+    const data = await r.json();
+    const file = data.files['shared.md'];
+    if (!file) throw new Error('no_file');
+    if (file.truncated) {
+      const raw = await fetch(file.raw_url);
+      return await raw.text();
+    }
+    return file.content;
+  }
 
   function encodeMarkdownForShare(text) {
     const compressed = pako.deflate(new TextEncoder().encode(text));
@@ -4095,59 +4124,75 @@ This is a fully client-side application. Your content never leaves your browser 
 
   async function copyShareUrl(btn) {
     const markdownText = markdownEditor.value;
-    let encoded;
-    try {
-      encoded = encodeMarkdownForShare(markdownText);
-    } catch (e) {
-      console.error("Share encoding failed:", e);
-      alert("Failed to encode content for sharing: " + e.message);
-      return;
-    }
-
     const baseUrl = window.location.origin + window.location.pathname;
-    const longUrl = baseUrl + '?share=' + encoded;
-    const tooLarge = longUrl.length > MAX_SHARE_URL_LENGTH;
-
     const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="btn-text">Shortening...</span>';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="btn-text">Sharing...</span>';
 
-    let shareUrl = longUrl;
-    if (!tooLarge) {
+    let shareUrl = null;
+
+    // Try GitHub Gist for a short URL
+    let token = getGHToken();
+    if (!token) {
+      token = prompt(
+        'For a short share link, enter a GitHub Personal Access Token with "gist" scope.\n\n' +
+        'How to create one:\n' +
+        '  1. Go to github.com/settings/tokens\n' +
+        '  2. Click "Generate new token (classic)"\n' +
+        '  3. Check the "gist" scope and generate\n\n' +
+        'Paste the token below (saved locally, never sent anywhere except GitHub).\n' +
+        'Leave blank to copy a long URL instead:'
+      );
+      if (token && token.trim()) saveGHToken(token);
+    }
+
+    if (getGHToken()) {
       try {
-        const apiResp = await fetch(
-          'https://is.gd/create.php?format=json&url=' + encodeURIComponent(longUrl)
-        );
-        if (apiResp.ok) {
-          const data = await apiResp.json();
-          if (data.shorturl) shareUrl = data.shorturl;
-        }
+        const gistId = await createGist(markdownText);
+        shareUrl = baseUrl + '?gist=' + gistId;
       } catch (e) {
-        console.warn("URL shortening failed, using long URL:", e);
+        if (e.message === 'bad_token') {
+          saveGHToken('');
+          btn.innerHTML = originalHTML;
+          alert('GitHub token is invalid or expired. Click Share again to enter a new one.');
+          return;
+        }
+        console.warn('Gist creation failed, falling back to long URL:', e);
       }
     }
 
-    function onCopied() {
-      if (!tooLarge) {
-        history.replaceState(null, '', '?share=' + encoded);
+    // Fallback: encode content in URL
+    if (!shareUrl) {
+      let encoded;
+      try {
+        encoded = encodeMarkdownForShare(markdownText);
+      } catch (e) {
+        btn.innerHTML = originalHTML;
+        alert('Failed to encode content for sharing: ' + e.message);
+        return;
       }
+      shareUrl = baseUrl + '?share=' + encoded;
+    }
+
+    const finalUrl = shareUrl;
+    function onCopied() {
+      const path = finalUrl.startsWith(baseUrl) ? finalUrl.slice(baseUrl.length) : finalUrl;
+      if (path.startsWith('?')) history.replaceState(null, '', path);
       btn.innerHTML = '<i class="bi bi-check-lg"></i> <span class="btn-text">Copied!</span>';
       setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
     }
 
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(shareUrl).then(onCopied).catch(() => {});
+      navigator.clipboard.writeText(finalUrl).then(onCopied).catch(() => {});
     } else {
       try {
-        const tempInput = document.createElement("textarea");
-        tempInput.value = shareUrl;
+        const tempInput = document.createElement('textarea');
+        tempInput.value = finalUrl;
         document.body.appendChild(tempInput);
         tempInput.select();
-        document.execCommand("copy");
+        document.execCommand('copy');
         document.body.removeChild(tempInput);
         onCopied();
-      } catch (_) {
-        // copy failed silently
-      }
+      } catch (_) {}
     }
   }
 
@@ -4157,14 +4202,27 @@ This is a fully client-side application. Your content never leaves your browser 
   function loadFromShareHash() {
     if (typeof pako === 'undefined') return;
 
-    // Check ?share= query param (new format from shortened URLs)
     const searchParams = new URLSearchParams(window.location.search);
-    const queryEncoded = searchParams.get('share');
 
-    // Fallback: legacy #share= hash format
+    // ?gist=ID — load from GitHub Gist (short URL)
+    const gistId = searchParams.get('gist');
+    if (gistId) {
+      loadGist(gistId).then(text => {
+        markdownEditor.value = text;
+        renderMarkdown();
+        saveCurrentTabState();
+      }).catch(e => {
+        console.error('Failed to load gist:', e);
+        alert('Failed to load shared content from GitHub Gist. The link may be expired or invalid.');
+      });
+      return;
+    }
+
+    // ?share= query param (encoded fallback)
+    const queryEncoded = searchParams.get('share');
+    // Legacy: #share= hash format
     const hash = window.location.hash;
     const hashEncoded = hash.startsWith('#share=') ? hash.slice('#share='.length) : null;
-
     const encoded = queryEncoded || hashEncoded;
     if (!encoded) return;
 
