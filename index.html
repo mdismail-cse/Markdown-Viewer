@@ -138,10 +138,29 @@
                     <button id="share-button" class="tool-button" title="Share via URL">
                         <i class="bi bi-share"></i> <span class="btn-text">Share</span>
                     </button>
+                    <button id="gh-token-btn" class="tool-button" title="Set GitHub token for short share links" style="opacity:0.55;font-size:0.8em;padding:4px 7px;">
+                        <i class="bi bi-key"></i>
+                    </button>
                     
                     <button id="theme-toggle" class="tool-button" title="Toggle Dark Mode">
                         <i class="bi bi-moon"></i>
                     </button>
+                </div>
+
+                <!-- GitHub token setup panel -->
+                <div id="gh-token-panel" style="display:none;position:absolute;right:8px;top:52px;z-index:1000;background:var(--bg-secondary,#fff);border:1px solid var(--border-color,#dee2e6);border-radius:8px;padding:14px 16px;width:320px;box-shadow:0 4px 16px rgba(0,0,0,.15);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <strong style="font-size:0.9em;"><i class="bi bi-key me-1"></i>Short Share Links</strong>
+                        <button id="gh-token-panel-close" style="background:none;border:none;cursor:pointer;font-size:1.1em;line-height:1;opacity:0.6;" title="Close">&times;</button>
+                    </div>
+                    <p style="font-size:0.8em;margin-bottom:10px;opacity:0.8;">Enter a GitHub token with <code>gist</code> scope to get short share URLs (e.g. <code>?gist=abc123</code>). Stored only in your browser.</p>
+                    <div id="gh-token-status" style="font-size:0.8em;margin-bottom:8px;"></div>
+                    <input id="gh-token-input" type="password" placeholder="ghp_xxxxxxxxxxxx" style="width:100%;padding:6px 8px;border:1px solid var(--border-color,#dee2e6);border-radius:5px;font-size:0.85em;margin-bottom:8px;background:var(--bg-primary,#fff);color:inherit;" />
+                    <div style="display:flex;gap:8px;">
+                        <button id="gh-token-save" style="flex:1;padding:5px;font-size:0.85em;cursor:pointer;border:none;border-radius:5px;background:#238636;color:#fff;">Save Token</button>
+                        <button id="gh-token-clear" style="padding:5px 10px;font-size:0.85em;cursor:pointer;border:1px solid var(--border-color,#dee2e6);border-radius:5px;background:none;color:inherit;">Clear</button>
+                    </div>
+                    <a href="https://github.com/settings/tokens/new?scopes=gist&description=md-viewer-share" target="_blank" style="font-size:0.75em;display:block;margin-top:8px;opacity:0.7;">Create a token on GitHub →</a>
                 </div>
                 
                 <!-- Hamburger menu for mobile -->

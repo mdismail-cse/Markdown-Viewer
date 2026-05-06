@@ -4130,21 +4130,7 @@ This is a fully client-side application. Your content never leaves your browser 
 
     let shareUrl = null;
 
-    // Try GitHub Gist for a short URL
-    let token = getGHToken();
-    if (!token) {
-      token = prompt(
-        'For a short share link, enter a GitHub Personal Access Token with "gist" scope.\n\n' +
-        'How to create one:\n' +
-        '  1. Go to github.com/settings/tokens\n' +
-        '  2. Click "Generate new token (classic)"\n' +
-        '  3. Check the "gist" scope and generate\n\n' +
-        'Paste the token below (saved locally, never sent anywhere except GitHub).\n' +
-        'Leave blank to copy a long URL instead:'
-      );
-      if (token && token.trim()) saveGHToken(token);
-    }
-
+    // Try GitHub Gist for a short URL (token must be pre-configured via key button)
     if (getGHToken()) {
       try {
         const gistId = await createGist(markdownText);
@@ -4153,7 +4139,7 @@ This is a fully client-side application. Your content never leaves your browser 
         if (e.message === 'bad_token') {
           saveGHToken('');
           btn.innerHTML = originalHTML;
-          alert('GitHub token is invalid or expired. Click Share again to enter a new one.');
+          openTokenPanel('Token is invalid or expired. Please enter a new one.');
           return;
         }
         console.warn('Gist creation failed, falling back to long URL:', e);
@@ -4198,6 +4184,77 @@ This is a fully client-side application. Your content never leaves your browser 
 
   shareButton.addEventListener("click", function () { copyShareUrl(shareButton); });
   mobileShareButton.addEventListener("click", function () { copyShareUrl(mobileShareButton); });
+
+  // ── GitHub token panel ──────────────────────────────────────────────────────
+  const ghTokenBtn        = document.getElementById('gh-token-btn');
+  const ghTokenPanel      = document.getElementById('gh-token-panel');
+  const ghTokenPanelClose = document.getElementById('gh-token-panel-close');
+  const ghTokenInput      = document.getElementById('gh-token-input');
+  const ghTokenSave       = document.getElementById('gh-token-save');
+  const ghTokenClear      = document.getElementById('gh-token-clear');
+  const ghTokenStatus     = document.getElementById('gh-token-status');
+
+  function updateTokenStatus() {
+    const t = getGHToken();
+    if (t) {
+      const masked = t.slice(0, 4) + '••••••••' + t.slice(-4);
+      ghTokenStatus.style.display = 'block';
+      ghTokenStatus.style.color = '#198754';
+      ghTokenStatus.textContent = '✓ Token saved: ' + masked;
+      ghTokenInput.value = '';
+      ghTokenInput.placeholder = 'Enter new token to replace';
+    } else {
+      ghTokenStatus.style.display = 'block';
+      ghTokenStatus.style.color = '#6c757d';
+      ghTokenStatus.textContent = 'No token saved — short links unavailable.';
+      ghTokenInput.value = '';
+      ghTokenInput.placeholder = 'ghp_xxxxxxxxxxxx';
+    }
+  }
+
+  function openTokenPanel(msg) {
+    updateTokenStatus();
+    if (msg) {
+      ghTokenStatus.style.color = '#dc3545';
+      ghTokenStatus.textContent = msg;
+    }
+    ghTokenPanel.style.display = 'block';
+    ghTokenInput.focus();
+  }
+
+  ghTokenBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (ghTokenPanel.style.display === 'none') {
+      openTokenPanel();
+    } else {
+      ghTokenPanel.style.display = 'none';
+    }
+  });
+
+  ghTokenPanelClose.addEventListener('click', function () {
+    ghTokenPanel.style.display = 'none';
+  });
+
+  ghTokenSave.addEventListener('click', function () {
+    const val = ghTokenInput.value.trim();
+    if (!val) { ghTokenStatus.style.color = '#dc3545'; ghTokenStatus.textContent = 'Please enter a token.'; return; }
+    saveGHToken(val);
+    updateTokenStatus();
+  });
+
+  ghTokenClear.addEventListener('click', function () {
+    saveGHToken('');
+    updateTokenStatus();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (ghTokenPanel.style.display !== 'none' &&
+        !ghTokenPanel.contains(e.target) &&
+        e.target !== ghTokenBtn) {
+      ghTokenPanel.style.display = 'none';
+    }
+  });
+  // ────────────────────────────────────────────────────────────────────────────
 
   function loadFromShareHash() {
     if (typeof pako === 'undefined') return;
