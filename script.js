@@ -858,10 +858,6 @@ This is a fully client-side application. Your content never leaves your browser 
 
   function newTab(content, title) {
     if (content === undefined) content = '';
-    if (tabs.length >= 20) {
-      alert('Maximum of 20 tabs reached. Please close an existing tab to open a new one.');
-      return;
-    }
     if (!title) title = nextUntitledTitle();
     const tab = createTab(content, title);
     tabs.push(tab);
@@ -950,10 +946,6 @@ This is a fully client-side application. Your content never leaves your browser 
   function duplicateTab(tabId) {
     const tab = tabs.find(function(t) { return t.id === tabId; });
     if (!tab) return;
-    if (tabs.length >= 20) {
-      alert('Maximum of 20 tabs reached. Please close an existing tab to open a new one.');
-      return;
-    }
     const shouldSwitchToDuplicate = tabId === activeTabId;
     saveCurrentTabState();
     const dupTitle = tab.title + ' (copy)';
